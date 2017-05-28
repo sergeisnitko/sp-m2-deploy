@@ -109,7 +109,7 @@
     <Compile Include="SharePoint\List.cs" />
     <Compile Include="SharePoint\Query.cs" />
     <Compile Include="SharePoint\Security.cs" />
-    <Compile Include="SharePoint\Taxonamy.cs" />
+    <Compile Include="SharePoint\Taxonomy.cs" />
     <Compile Include="SharePoint\Web.cs" />
   </ItemGroup>
   <ItemGroup>

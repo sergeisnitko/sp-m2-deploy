@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace SPF.Extentions
 {
-    public static class Taxonamy
+    public static class Taxonomy
     {
         public static int GetWssId(this ClientContext Context, Guid TermId, Guid TermSetId)
         {
