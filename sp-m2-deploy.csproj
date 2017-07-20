@@ -100,6 +100,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Artefacts\SpfActions.cs" />
+    <Compile Include="Artefacts\SpfContentTypes.cs" />
+    <Compile Include="Artefacts\SpfDemo.cs" />
+    <Compile Include="Artefacts\SpfDeploy.cs" />
+    <Compile Include="Artefacts\SpfFeatures.cs" />
+    <Compile Include="Artefacts\SpfFields.cs" />
+    <Compile Include="Artefacts\SpfLists.cs" />
+    <Compile Include="Artefacts\SpfViews.cs" />
     <Compile Include="Common\IList.cs" />
     <Compile Include="Common\Mail.cs" />
     <Compile Include="Common\Simple.cs" />
@@ -115,6 +123,7 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
