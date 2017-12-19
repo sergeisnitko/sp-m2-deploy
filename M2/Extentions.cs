@@ -20,6 +20,9 @@ using SPMeta2.Extensions;
 using SPMeta2.Common;
 using SPMeta2.Definitions.ContentTypes;
 using System.Collections.Generic;
+using SPMeta2.CSOM.ModelHosts;
+using SPMeta2.Utils;
+using System.Collections.ObjectModel;
 
 namespace SPF.M2
 { 
@@ -95,18 +98,18 @@ namespace SPF.M2
         }
 
 
-        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, int Order)
+        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, List<FieldValue> Fields)
                     where TModelNode : ModelNode, IFolderHostModelNode, new()
         {
-            return AddCustomFolder(node, FolderDef, ContentType, Order, null, null);
+            return AddCustomFolder(node, FolderDef, ContentType, Fields, null, null);
         }
-        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, int Order, Action<FolderModelNode> FolderAction)
+        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, List<FieldValue> Fields, Action<FolderModelNode> FolderAction)
             where TModelNode : ModelNode, IFolderHostModelNode, new()
         {
-            return AddCustomFolder(node, FolderDef, ContentType, Order, FolderAction, null);
+            return AddCustomFolder(node, FolderDef, ContentType, Fields, FolderAction, null);
         }
 
-        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, int Order, Action<FolderModelNode> FolderAction, Action<FolderModelNode> SecurityAction)
+        public static TModelNode AddCustomFolder<TModelNode>(this TModelNode node, FolderDefinition FolderDef, ContentTypeDefinition ContentType, List<FieldValue> Fields, Action<FolderModelNode> FolderAction, Action<FolderModelNode> SecurityAction)
             where TModelNode : ModelNode, IFolderHostModelNode, new()
         {
             node
@@ -119,28 +122,59 @@ namespace SPF.M2
                         FolderAction(modelNode);
                     }
 
-                    prj.AddBreakRoleInheritance(new BreakRoleInheritanceDefinition
+                    if (SecurityAction != null)
                     {
-                        CopyRoleAssignments = false,
-                        ClearSubscopes = true
-                    }, dlWithBrokenInheritance =>
-                    {
-                        if (SecurityAction != null)
+                        prj.AddBreakRoleInheritance(new BreakRoleInheritanceDefinition
                         {
-                            SecurityAction(dlWithBrokenInheritance);
-                        }
-                    });
+                            CopyRoleAssignments = false,
+                            ClearSubscopes = true
+                        }, dlWithBrokenInheritance =>
+                        {
+                            if (SecurityAction != null)
+                            {
+                                SecurityAction(dlWithBrokenInheritance);
+                            }
+                        });
+                    }
 
 
                     prj.OnProvisioned<object>(context =>
                     {
-                        ChangeFolderContentType(context, Order, ContentType);
+                        ChangeFolderContentType(context, Fields, ContentType);
                     });
                 });
 
             return node;
         }
-        public static void ChangeFolderContentType(OnCreatingContext<object, DefinitionBase> context, int Order, ContentTypeDefinition ContentType)
+
+        public static FolderDefinition NamedFolder(string Name)
+        {
+            return new FolderDefinition
+            {
+                Name = Name
+            };
+        }
+
+
+        public static WebModelNode ClearQuickLaunchBeforeDeploy(this WebModelNode Node)
+        {
+            Node
+                .OnProvisioning<Web>(context =>
+                {
+                    var ModelHost = (WebModelHost)context.ModelHost;
+                    var Ctx = ModelHost.HostClientContext;
+                    var InHostWeb = ModelHost.HostWeb;
+
+                    var webDefinition = (WebDefinition)context.ObjectDefinition;
+                    Web InWeb = Ctx.Site.OpenWeb(UrlUtility.CombineUrl(InHostWeb.ServerRelativeUrl, webDefinition.Url));
+
+                    InWeb.ClearQuickLaunch();
+
+                });
+            return Node;
+        }
+
+        public static void ChangeFolderContentType(OnCreatingContext<object, DefinitionBase> context, List<FieldValue> Fields, ContentTypeDefinition ContentType)
         {
             var obj = context.Object;
             var objType = context.Object.GetType();
@@ -156,6 +190,10 @@ namespace SPF.M2
                 if (FolderItem != null)
                 {
                     FolderItem["ContentTypeId"] = ContentType.GetContentTypeId().ToString();
+                    Fields.ForEach(F =>
+                    {
+                        FolderItem[F.FieldName] = F.Value;
+                    });
                     FolderItem.Update();
                     ctx.ExecuteQuery();
                 }
@@ -266,6 +304,20 @@ namespace SPF.M2
             return node;
         }
 
+        public static void ClearQuickLaunch(this Web oWeb)
+        {
+            var Context = (ClientContext)oWeb.Context;
+            var oNavigation = oWeb.Navigation.QuickLaunch;
+            Context.Load(oNavigation);
+            Context.ExecuteQuery();
+
+            while (oNavigation.Count > 0)
+            {
+                var node = oNavigation.FirstOrDefault();
+                node.DeleteObject();
+                Context.ExecuteQuery();
+            }
+        }
 
         public static void DeployModel(this ClientContext Ctx, WebModelNode model)
         {
@@ -281,6 +333,23 @@ namespace SPF.M2
         {
             BeforeDeployModel(Incremental, x =>
             {
+                PropertyBagValue incrementalProvisionModelIdProperty = model.PropertyBag.FirstOrDefault(currentPropertyValue =>
+                        currentPropertyValue.Name == "_sys.IncrementalProvision.PersistenceStorageModelId");
+                if (Incremental && incrementalProvisionModelIdProperty == null)
+                {
+                    new SystemException("Please set incremental provision model id");
+                }
+
+                Console.WriteLine("Provisioning preparing model");
+                var preparingModel = model.GetContainersModel();
+                if (incrementalProvisionModelIdProperty != null)
+                {
+                    preparingModel.SetIncrementalProvisionModelId("Preparing: " + incrementalProvisionModelIdProperty.Value);
+                }
+                x.DeployModel(SPMeta2.CSOM.ModelHosts.WebModelHost.FromClientContext(Ctx), preparingModel);
+                Console.WriteLine();
+
+                Console.WriteLine("Provisioning main model");
                 x.DeployModel(SPMeta2.CSOM.ModelHosts.WebModelHost.FromClientContext(Ctx), model);
             });
         }
@@ -288,6 +357,23 @@ namespace SPF.M2
         {
             BeforeDeployModel(Incremental, x =>
             {
+                PropertyBagValue incrementalProvisionModelIdProperty = model.PropertyBag.FirstOrDefault(currentPropertyValue =>
+                        currentPropertyValue.Name == "_sys.IncrementalProvision.PersistenceStorageModelId");
+                if (Incremental && incrementalProvisionModelIdProperty == null)
+                {
+                    new SystemException("Please set incremental provision model id");
+                }
+
+                Console.WriteLine("Provisioning preparing model");
+                var preparingModel = model.GetContainersModel();
+                if (incrementalProvisionModelIdProperty != null)
+                {
+                    preparingModel.SetIncrementalProvisionModelId("Preparing: " + incrementalProvisionModelIdProperty.Value);
+                }
+                x.DeployModel(SPMeta2.CSOM.ModelHosts.SiteModelHost.FromClientContext(Ctx), preparingModel);
+                Console.WriteLine();
+
+                Console.WriteLine("Provisioning main model");
                 x.DeployModel(SPMeta2.CSOM.ModelHosts.SiteModelHost.FromClientContext(Ctx), model);
             });
 
@@ -365,5 +451,62 @@ namespace SPF.M2
 
         }
 
+        private static WebModelNode GetContainersModel(this WebModelNode model)
+        {
+            WebModelNode containersModel = SPMeta2Model.NewWebModel();
+
+            foreach (ModelNode modelNode in model.ChildModels)
+            {
+                if (modelNode.Value.GetType() == typeof(WebDefinition))
+                {
+                    containersModel.AddWeb((WebDefinition)modelNode.Value, currentWeb => {
+                        currentWeb.GetWebContainersModel(modelNode.ChildModels);
+                    });
+                }
+
+                if (modelNode.Value.GetType() == typeof(ListDefinition))
+                {
+                    containersModel.AddList((ListDefinition)modelNode.Value);
+                }
+            }
+
+            return containersModel;
+        }
+
+        private static SiteModelNode GetContainersModel(this SiteModelNode model)
+        {
+            SiteModelNode containersModel = SPMeta2Model.NewSiteModel();
+
+            foreach (ModelNode modelNode in model.ChildModels)
+            {
+                if (modelNode.Value.GetType() == typeof(WebDefinition))
+                {
+                    containersModel.AddWeb((WebDefinition)modelNode.Value, currentWeb => {
+                        currentWeb.GetWebContainersModel(modelNode.ChildModels);
+                    });
+                }
+            }
+
+            return containersModel;
+        }
+
+        private static WebModelNode GetWebContainersModel(this WebModelNode model, Collection<ModelNode> childModels)
+        {
+            foreach (ModelNode modelNode in childModels)
+            {
+                if (modelNode.Value.GetType() == typeof(WebDefinition))
+                {
+                    model.AddWeb((WebDefinition)modelNode.Value, currentWeb => {
+                        currentWeb.GetWebContainersModel(modelNode.ChildModels);
+                    });
+                }
+
+                if (modelNode.Value.GetType() == typeof(ListDefinition))
+                {
+                    model.AddList((ListDefinition)modelNode.Value);
+                }
+            }
+            return model;
+        }
     }
 }
