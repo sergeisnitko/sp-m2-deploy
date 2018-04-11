@@ -427,10 +427,14 @@ namespace SPF.M2
 
             bool shouldDeploy = args.CurrentNode.GetIncrementalRequireSelfProcessingValue();
 
-            var NodeName = args.CurrentNode.Value.ToString();
-            if (NodeName.Length > 20)
+            var NodeName = args.CurrentNode.Value.ToString().Replace("Definition","");
+            if (NodeName.Length > 30)
             {
-                NodeName = NodeName.Substring(0, 20) + "...";
+                NodeName = NodeName.Substring(0, 30) + "...";
+            }
+            if (ModelId.Length > 20)
+            {
+                ModelId = ModelId.Substring(0, 20) + "...";
             }
             if (!Incremental)
             {
