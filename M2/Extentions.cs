@@ -421,16 +421,25 @@ namespace SPF.M2
 
         }
 
+        public static string RemoveLongNamesInModel(this string ModelName)
+        {
+            return ModelName
+                    .Replace("Definition", "")
+                    .Replace("NavigationNode", "")
+                    .Replace("SPMeta2.s.ContentTypes.", "")                    
+                    ;
+        }
+
         public static void ModelNodeProcessed(object sender, ModelProcessingEventArgs args, bool Incremental)
         {
             var ModelId = args.Model.GetPropertyBagValue(DefaultModelNodePropertyBagValue.Sys.IncrementalProvision.PersistenceStorageModelId);
 
             bool shouldDeploy = args.CurrentNode.GetIncrementalRequireSelfProcessingValue();
 
-            var NodeName = args.CurrentNode.Value.ToString().Replace("Definition","");
-            if (NodeName.Length > 30)
+            var NodeName = args.CurrentNode.Value.ToString().RemoveLongNamesInModel();
+            if (NodeName.Length > 40)
             {
-                NodeName = NodeName.Substring(0, 30) + "...";
+                NodeName = NodeName.Substring(0, 40) + "...";
             }
             if (ModelId.Length > 20)
             {
@@ -447,10 +456,10 @@ namespace SPF.M2
                     args.ProcessedModelNodeCount.AddZeros(4),
                     args.TotalModelNodeCount.AddZeros(4),
                     Math.Round(100d * (double)args.ProcessedModelNodeCount / (double)args.TotalModelNodeCount).AddSpacesBefore(3),
-                    args.CurrentNode.Value.GetType().Name,
-                    NodeName,
+                    (args.CurrentNode.Value.GetType().Name.RemoveLongNamesInModel()+"                    ").Substring(0, 20),
+                    (NodeName+"                                        ").Substring(0, 40),
                     (shouldDeploy == true) ? "[+]" : "[-]",
-                    ModelId
+                    (ModelId+"                    ").Substring(0, 20)
            }));
 
         }
